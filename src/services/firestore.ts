@@ -3,6 +3,8 @@ import admin from "firebase-admin";
 import { FirestoreMessage } from "../types";
 import { startOfDay } from "date-fns";
 
+import { config } from "dotenv";
+
 if (!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
   throw new Error(
     "FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable is not set"

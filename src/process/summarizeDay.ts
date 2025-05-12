@@ -1,7 +1,7 @@
+import "dotenv/config";
 import { renderMessages } from "../helpers/renderMessages.js";
 
 import { FirestoreMessage } from "../types.js";
-import { firestore } from "../services/firestore.js";
 import { startOfDay } from "date-fns";
 
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -9,11 +9,10 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { z } from "zod";
 import { getAllChatsForDay } from "../helpers/chat-fns.js";
 import dayjs from "dayjs";
-import { config } from "dotenv";
 import { HumanMessage } from "@langchain/core/messages";
 import { SystemMessage } from "@langchain/core/messages";
 
-config();
+import { firestore } from "../services/firestore.js";
 
 interface ChatData {
   chatId: string;

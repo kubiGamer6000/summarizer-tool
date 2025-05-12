@@ -1,19 +1,10 @@
-// import express from "express";
-// import { processDailyChats } from "./process/summarizeDay";
+import "dotenv/config";
 
-// const app = express();
+import { processRecentContactKnowledge } from "./process/contactKnowledge.js";
 
-// app.get("/daily-summary", async (req, res) => {
-//   try {
-//     const result = await processDailyChats(new Date());
+import { processMissingSummaries } from "./process/summarizeDay.js";
 
-//     res.json(result);
-//   } catch (error) {
-//     res.status(500).json({ error: "Failed to generate daily summary" });
-//   }
-// });
+await processRecentContactKnowledge();
+await processMissingSummaries();
 
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
+console.log("All processes completed successfully");
