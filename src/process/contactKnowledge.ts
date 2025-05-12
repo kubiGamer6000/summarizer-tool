@@ -23,14 +23,18 @@ import { DocumentSnapshot } from "firebase-admin/firestore";
 import { DocumentData } from "firebase-admin/firestore";
 
 import dayjs from "dayjs";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenAI } from "@langchain/openai";
 
 config();
 
 const MAIN_PERSON_NAME = "Ace Jernberg";
 const MAIN_PERSON_CONTEXT = `
-Ace Blond (Jesper Jernberg) is a male entrepreneur based in Marbella, Spain.
+Ace Blond (Jesper Jernberg) is a Swedish male entrepreneur based in Marbella, Spain.
 He is the founder of Content Currency, a team of 3 people that provides videography, editing, AI solutions and development services.
 Besides that, he has many different projects and ventures, as well as personal projects and interests.
+
+Do not hesitate to also include personal information about the contact or project - as not every relationship is professional.
 `;
 
 const ContactKnowledgeSchema = z.object({
@@ -84,6 +88,7 @@ const CONTACT_KNOWLEDGE_FOR_DAY_UPDATE_SYSTEM = `
 --Goal--
 You are an expert chat analyst that analyzes new chat data and updates a knowledge profile about a specific contact of ${MAIN_PERSON_NAME}.
 Your goal is to analyze the chat with the contact, and update the already existing knowledge profile about the contact.
+IMPORTANT: Retain current information about the contact - you can update what is new or has changed, or change the way you understand the relationship, but do not remove any information.
 
 --Context--
 ${MAIN_PERSON_CONTEXT}
@@ -143,11 +148,147 @@ export const updateAllContactsKnowledgeForDay = async (day: Date) => {
   }
 };
 
+/**
+ * Process contact knowledge sequentially day by day, ensuring each day builds on previous knowledge
+ */
+export async function processSequentialContactKnowledge(
+  startDate: Date,
+  endDate: Date
+) {
+  try {
+    console.log(
+      `Processing sequential contact knowledge from ${dayjs(startDate).format(
+        "DD-MM-YYYY"
+      )} to ${dayjs(endDate).format("DD-MM-YYYY")}`
+    );
+
+    // For each day in range
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      const formattedDate = dayjs(currentDate).format("DD-MM-YYYY");
+      console.log(`Processing contact knowledge for ${formattedDate}`);
+
+      // Get all chats for the current day
+      const chatMap = await getAllChatsForDay(currentDate);
+
+      for (const [chatId, messages] of chatMap.entries()) {
+        // Skip group chats
+        const chatDoc = await firestore
+          .collection(process.env.FIRESTORE_CHATS_COLLECTION!)
+          .doc(chatId)
+          .get();
+
+        const contactData = chatDoc.data();
+        if (
+          !contactData ||
+          contactData.isGroup ||
+          chatId.endsWith("@broadcast")
+        ) {
+          console.log(`- Skipping chat ${chatId}`);
+          continue;
+        }
+
+        const contactName = contactData.name || chatId;
+
+        // Check if knowledge already exists for this day
+        const knowledgeDoc = await firestore
+          .collection(process.env.FIRESTORE_CHATS_COLLECTION!)
+          .doc(chatId)
+          .collection("knowledge")
+          .doc(formattedDate)
+          .get();
+
+        if (knowledgeDoc.exists) {
+          console.log(
+            `- Knowledge for ${contactName} on ${formattedDate} already exists, skipping.`
+          );
+          continue;
+        }
+
+        // Find the most recent knowledge before this day
+        let previousDate = new Date(currentDate);
+        previousDate.setDate(previousDate.getDate() - 1);
+        let previousKnowledge = null;
+
+        // Look back up to 30 days to find previous knowledge
+        for (let i = 0; i < 30; i++) {
+          const prevFormattedDate = dayjs(previousDate).format("DD-MM-YYYY");
+          const prevKnowledgeDoc = await firestore
+            .collection(process.env.FIRESTORE_CHATS_COLLECTION!)
+            .doc(chatId)
+            .collection("knowledge")
+            .doc(prevFormattedDate)
+            .get();
+
+          if (prevKnowledgeDoc.exists) {
+            previousKnowledge = prevKnowledgeDoc.data();
+            console.log(
+              `- Found previous knowledge for ${contactName} from ${prevFormattedDate}`
+            );
+            break;
+          }
+
+          previousDate.setDate(previousDate.getDate() - 1);
+        }
+
+        // If no previous knowledge was found, use any existing knowledge in the contact document
+        if (!previousKnowledge && contactData.knowledge) {
+          previousKnowledge = contactData.knowledge;
+          console.log(`- Using existing contact knowledge for ${contactName}`);
+        }
+
+        // Process contact knowledge for current day based on previous knowledge
+        console.log(
+          `- Processing knowledge for ${contactName} on ${formattedDate}`
+        );
+        const newKnowledge = await processContactKnowledgeForDay(
+          chatId,
+          currentDate,
+          messages,
+          chatDoc,
+          previousKnowledge
+        );
+
+        // Store knowledge in subcollection with current date
+        await firestore
+          .collection(process.env.FIRESTORE_CHATS_COLLECTION!)
+          .doc(chatId)
+          .collection("knowledge")
+          .doc(formattedDate)
+          .set(newKnowledge);
+
+        // Update the contact with latest knowledge
+        await firestore
+          .collection(process.env.FIRESTORE_CHATS_COLLECTION!)
+          .doc(chatId)
+          .update({
+            knowledge: newKnowledge,
+          });
+
+        console.log(
+          `- Knowledge for ${contactName} on ${formattedDate} updated successfully`
+        );
+      }
+
+      // Move to the next day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    console.log("Sequential contact knowledge processing complete.");
+  } catch (error) {
+    console.error("Error processing sequential contact knowledge:", error);
+    throw error;
+  }
+}
+
+// Update the processContactKnowledgeForDay function to accept previousKnowledge parameter
 const processContactKnowledgeForDay = async (
   jid: string,
   day: Date,
   messages: FirestoreMessage[],
-  chatDoc: DocumentSnapshot<DocumentData>
+  chatDoc: DocumentSnapshot<DocumentData>,
+  previousKnowledge: any = null
 ) => {
   console.log(`- - Processing knowledge for ${jid}`);
   // Render Firestore messages to plain text string for LLM
@@ -159,9 +300,28 @@ const processContactKnowledgeForDay = async (
     throw new Error(`- - Contact data not found for ${jid}`);
   }
 
+  // Skip if there are no messages to process for the day
+  if (!renderedMessages || renderedMessages.trim() === "") {
+    console.log(
+      `- - No new messages for ${jid} on ${dayjs(day).format(
+        "DD-MM-YYYY"
+      )}. Skipping LLM call.`
+    );
+    // Return previous knowledge or a default structure if no new messages
+    return (
+      previousKnowledge ||
+      contactData.knowledge || {
+        relationToMainPerson: "No new interaction to update.",
+        fullDescription: "No new interaction to update.",
+        shortDescription: "No new interaction to update.",
+      }
+    );
+  }
+
   const contactName = contactData.name || jid;
 
-  const existingKnowledge = contactData.knowledge;
+  // Use provided previous knowledge or fall back to existing knowledge
+  const existingKnowledge = previousKnowledge || contactData.knowledge;
   console.log(
     existingKnowledge
       ? `- - Existing knowledge found for ${contactName}. Updating...`
@@ -181,7 +341,7 @@ const processContactKnowledgeForDay = async (
             null,
             2
           )}`
-        : ""
+        : "No existing knowledge found."
     ),
     new HumanMessage(
       `Chat between ${MAIN_PERSON_NAME} and ${contactName} on ${dayjs(
@@ -190,26 +350,63 @@ const processContactKnowledgeForDay = async (
     ),
   ];
 
-  const model = new ChatAnthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-    model: "claude-3-7-sonnet-20250219",
-    temperature: 0.0,
-    maxTokens: 10000,
+  const geminiModel = new ChatGoogleGenerativeAI({
+    model: "gemini-2.5-pro-preview-05-06",
+    apiKey: process.env.GOOGLE_API_KEY,
+    temperature: 0.5,
+    maxRetries: 6, // Reduced retries for faster fallback
   }).withStructuredOutput(ContactKnowledgeSchema);
 
-  // TODO: Add relationship to other contacts mapping
-  // TODO: Add updating of tasks
+  const openaiModel = new ChatOpenAI({
+    modelName: "gpt-4o",
+    apiKey: process.env.OPENAI_API_KEY,
+    temperature: 0.5,
+    maxRetries: 3,
+  }).withStructuredOutput(ContactKnowledgeSchema);
 
-  const response = await model.invoke(prompt);
+  let response;
+  try {
+    console.log(`- - - Attempting to process with Gemini for ${contactName}`);
+    response = await geminiModel.invoke(prompt);
+    console.log(`- - - Gemini processed successfully for ${contactName}`);
+  } catch (geminiError) {
+    console.error(`- - - Gemini failed for ${contactName}:`, geminiError);
+    console.log(`- - - Attempting fallback to GPT-4o for ${contactName}`);
+    try {
+      response = await openaiModel.invoke(prompt);
+      console.log(`- - - GPT-4o processed successfully for ${contactName}`);
+    } catch (openaiError) {
+      console.error(
+        `- - - GPT-4o also failed for ${contactName}:`,
+        openaiError
+      );
+      throw openaiError; // Re-throw if both models fail
+    }
+  }
+
   console.log(`- - Knowledge for ${contactName} processed`);
   return response;
 };
 
-// loop for every day between run it for april 14th 2025 and april 19th 2025
-for (
-  let day = new Date("2025-04-20");
-  day <= new Date("2025-05-06");
-  day.setDate(day.getDate() + 1)
-) {
-  await updateAllContactsKnowledgeForDay(day);
+// Function to process the last 14 days sequentially
+export async function processRecentContactKnowledge() {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
+
+  const startDate = new Date(yesterday);
+  startDate.setDate(startDate.getDate() - 13); // 14 days ago including yesterday
+
+  await processSequentialContactKnowledge(startDate, yesterday);
 }
+
+// Replace the specific date range loop with the sequential processing
+// for (
+//   let day = new Date("2025-04-20");
+//   day <= new Date("2025-05-06");
+//   day.setDate(day.getDate() + 1)
+// ) {
+//   await updateAllContactsKnowledgeForDay(day);
+// }
+
+processRecentContactKnowledge();

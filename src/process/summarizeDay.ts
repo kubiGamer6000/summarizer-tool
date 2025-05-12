@@ -353,24 +353,10 @@ ${chat.renderedMessages}
       maxRetries: 6,
     }).withStructuredOutput(SummarySchema);
 
-    // write the input for the model to a file
-    fs.writeFileSync(
-      `./${dayjs(day).format("DD-MM-YYYY")}-input.txt`,
-      SUMMARY_SYSTEM + "\n\n" + JSON.stringify(chatTemplates)
-    );
-
-    return;
-
     const summary = await model.invoke([
       new SystemMessage(SUMMARY_SYSTEM),
       new HumanMessage(JSON.stringify(chatTemplates)),
     ]);
-
-    // write the output for the model to a file
-    fs.writeFileSync(
-      `./${dayjs(day).format("DD-MM-YYYY")}-output.txt`,
-      JSON.stringify(summary)
-    );
 
     // Store all summaries in Firebase
     const formattedDate = dayjs(day).format("DD-MM-YYYY");
@@ -378,6 +364,7 @@ ${chat.renderedMessages}
     await firestore.collection("summaries").doc(formattedDate).set({
       date: day,
       summary,
+      input: chatTemplates,
     });
 
     // return {
@@ -517,7 +504,75 @@ export async function processDailyChatsForYesterday() {
   return await processDailyChats(yesterday);
 }
 
-processDailyChats(new Date("2025-05-07"));
+/**
+ * Process summaries for the past 14 days, filling in any missing days
+ * and ensuring yesterday's summary is processed
+ */
+export async function processMissingSummaries() {
+  try {
+    console.log("Checking for missing summaries in the past 14 days...");
+
+    // Calculate date range (14 days ago until yesterday)
+    const yesterday = new Date();
+    // yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0); // Set to start of day
+
+    const startDate = new Date(yesterday);
+    startDate.setDate(startDate.getDate() - 13); // 14 days ago including yesterday
+
+    // Get all existing summaries for this date range
+    const snapshot = await firestore
+      .collection("summaries")
+      .where("date", ">=", startDate)
+      .where("date", "<=", yesterday)
+      .get();
+
+    // Create a map of existing summary dates (using formatted date as key)
+    const existingSummaries = new Map<string, boolean>();
+    snapshot.forEach((doc) => {
+      existingSummaries.set(doc.id, true);
+    });
+
+    // Check each day in the range for missing summaries
+    const currentDate = new Date(startDate);
+    const processedDates: Date[] = [];
+
+    while (currentDate <= yesterday) {
+      const formattedDate = dayjs(currentDate).format("DD-MM-YYYY");
+
+      if (!existingSummaries.has(formattedDate)) {
+        console.log(`Missing summary for ${formattedDate}, processing...`);
+        await processDailyChats(new Date(currentDate));
+        processedDates.push(new Date(currentDate));
+      } else {
+        console.log(`Summary already exists for ${formattedDate}, skipping.`);
+      }
+
+      // Move to the next day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Ensure yesterday's summary is processed (even if it already exists)
+    const yesterdayFormatted = dayjs(yesterday).format("DD-MM-YYYY");
+    if (
+      !processedDates.some(
+        (date) => dayjs(date).format("DD-MM-YYYY") === yesterdayFormatted
+      )
+    ) {
+      console.log(`Processing yesterday's summary (${yesterdayFormatted})...`);
+      await processDailyChats(yesterday);
+    }
+
+    console.log("All missing summaries have been processed.");
+  } catch (error) {
+    console.error("Error processing missing summaries:", error);
+    throw error;
+  }
+}
+
+// Replace the specific date call with the automated process
+// processDailyChats(new Date("2025-05-07"));
+processMissingSummaries();
 
 // async function processChat(
 //   renderedMessages: string,

@@ -26,6 +26,7 @@
     "express": "^4.21.2",
     "firebase-admin": "^13.1.0",
     "langchain": "^0.3.19",
+    "langsmith": "^0.3.28",
     "openai": "^4.85.4",
     "zod": "^3.24.2"
   },
