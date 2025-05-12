@@ -2,9 +2,6 @@ import { endOfDay } from "date-fns";
 import admin from "firebase-admin";
 import { FirestoreMessage } from "../types";
 import { startOfDay } from "date-fns";
-import { config } from "dotenv";
-
-config();
 
 if (!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
   throw new Error(

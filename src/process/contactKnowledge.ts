@@ -395,7 +395,7 @@ export async function processRecentContactKnowledge() {
   yesterday.setHours(0, 0, 0, 0);
 
   const startDate = new Date(yesterday);
-  startDate.setDate(startDate.getDate() - 13); // 14 days ago including yesterday
+  startDate.setDate(startDate.getDate() - 3); // 14 days ago including yesterday
 
   await processSequentialContactKnowledge(startDate, yesterday);
 }

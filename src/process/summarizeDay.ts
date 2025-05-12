@@ -512,7 +512,7 @@ export async function processMissingSummaries() {
     yesterday.setHours(0, 0, 0, 0); // Set to start of day
 
     const startDate = new Date(yesterday);
-    startDate.setDate(startDate.getDate() - 13); // 14 days ago including yesterday
+    startDate.setDate(startDate.getDate() - 3); // 14 days ago including yesterday
 
     // Get all existing summaries for this date range
     const snapshot = await firestore
