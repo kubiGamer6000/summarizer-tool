@@ -1,19 +1,13 @@
-import { renderMessages } from "../helpers/renderMessages";
-import {
-  SingleProcessedAndSummarizedChatSchema,
-  SingleProcessedChatSchema,
-} from "../schemas";
+import { renderMessages } from "../helpers/renderMessages.js";
 
-import { anthropic, openai } from "../services/instructor";
 import { FirestoreMessage } from "../types";
 import { firestore } from "../services/firestore";
 import { startOfDay } from "date-fns";
-import { endOfDay } from "date-fns";
+
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatAnthropic } from "@langchain/anthropic";
-import fs from "fs";
+
 import { z } from "zod";
-import { getAllChatsForDay } from "../helpers/chat-fns";
+import { getAllChatsForDay } from "../helpers/chat-fns.js";
 import dayjs from "dayjs";
 import { config } from "dotenv";
 import { HumanMessage } from "@langchain/core/messages";

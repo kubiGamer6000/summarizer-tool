@@ -11,8 +11,8 @@
 import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
-import { getAllChatsForDay } from "../helpers/chat-fns";
-import { renderMessages } from "../helpers/renderMessages";
+import { getAllChatsForDay } from "../helpers/chat-fns.js";
+import { renderMessages } from "../helpers/renderMessages.js";
 import type { FirestoreMessage } from "../types";
 
 import { firestore } from "../services/firestore";
