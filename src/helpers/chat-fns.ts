@@ -1,7 +1,7 @@
 import { endOfDay } from "date-fns";
 import { startOfDay } from "date-fns";
-import { firestore } from "../services/firestore";
-import { FirestoreMessage } from "../types";
+import { firestore } from "../services/firestore.js";
+import { FirestoreMessage } from "../types.js";
 
 export async function getAllChatsForDay(
   day?: Date

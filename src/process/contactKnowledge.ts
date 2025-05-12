@@ -13,9 +13,9 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 import { getAllChatsForDay } from "../helpers/chat-fns.js";
 import { renderMessages } from "../helpers/renderMessages.js";
-import type { FirestoreMessage } from "../types";
+import type { FirestoreMessage } from "../types.js";
 
-import { firestore } from "../services/firestore";
+import { firestore } from "../services/firestore.js";
 
 import { z } from "zod";
 import { config } from "dotenv";

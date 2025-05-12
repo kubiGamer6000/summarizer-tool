@@ -1,7 +1,7 @@
 import { renderMessages } from "../helpers/renderMessages.js";
 
-import { FirestoreMessage } from "../types";
-import { firestore } from "../services/firestore";
+import { FirestoreMessage } from "../types.js";
+import { firestore } from "../services/firestore.js";
 import { startOfDay } from "date-fns";
 
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
