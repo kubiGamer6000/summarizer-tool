@@ -7,7 +7,7 @@
 // - - - Has a brief description of the contact, their category (close-friend) [ ]
 // - - Update the current knowledge with today's knowledge (with another LLM call) [ ]
 // - - Store the knowledge in firestore, with versioning, and latest version [ ]
-
+import "dotenv/config";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
@@ -25,8 +25,6 @@ import { DocumentData } from "firebase-admin/firestore";
 import dayjs from "dayjs";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
-
-config();
 
 const MAIN_PERSON_NAME = "Ace Jernberg";
 const MAIN_PERSON_CONTEXT = `

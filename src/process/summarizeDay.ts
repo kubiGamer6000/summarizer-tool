@@ -507,7 +507,7 @@ export async function processMissingSummaries() {
 
     // Calculate date range (14 days ago until yesterday)
     const yesterday = new Date();
-    // yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0); // Set to start of day
 
     const startDate = new Date(yesterday);
